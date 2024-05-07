@@ -1,10 +1,5 @@
-local component = require("component")
-local robot = require("robot")
-local sides = require("sides")
-local ge = component.geolyzer
-local ic = component.inventory_controller
 local breeding = require("Breeding")
-
+local hybrid = require("Hybrid")
 
 
 
@@ -15,7 +10,9 @@ local function initialize()
         if select == "1" then
             breeding.breeding()
         elseif select == "2" then
+            hybrid.hybrid()
         elseif select == "3" then
+            print("暂未完成")
         elseif select == "-1" then
             print("程序退出")
             os.exit(0)

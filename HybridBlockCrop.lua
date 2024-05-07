@@ -91,7 +91,14 @@ end
 ---@param otherHybrid HybridBlockCrop
 ---@return boolean
 function HybridBlockCrop:equals(otherHybrid)
-    return self.name == otherHybrid.name and self.ga == otherHybrid.gr and self.re == otherHybrid.re
+    return self.name == otherHybrid.name and self.ga == otherHybrid.ga and self.re == otherHybrid.re and
+    self.gr == otherHybrid.gr
+end
+
+function HybridBlockCrop:toString()
+    for key, value in pairs(self) do
+        print("key: " .. key .. " value: " .. value)
+    end
 end
 
 return HybridBlockCrop

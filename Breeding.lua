@@ -8,72 +8,21 @@ local blockCropName = "IC2:blockCrop"
 local itemAirName = "minecraft:air"
 local hybridBlockCrop = require("HybridBlockCrop")
 local botMove = require("RobotMove")
+local comment = require("Comment")
 -- 种子属性权重
 local cropSeedWeight = { 0.5, 0.35, 0.15 }
 local breedingName
 
+
+
 local breeding = {}
 
----检索机器人物品栏中的指定物品
----@param name string 要检索的物品名
----@param hasSelect boolean as 是否要选中找到的槽位
----@param startIndex integer as 从第几位开始查找
----@return integer as 找到的槽位
----@return table as 槽位的物品信息 如果是ic2种子则会返回封装了基础属性的table
-local function findBotInventory(name, hasSelect, startIndex)
-    local index = -1
-    startIndex = startIndex or 1
-    local itemInfo
-    for i = startIndex, robot.inventorySize(), 1 do
-        itemInfo = ic.getStackInInternalSlot(i)
 
-        if (itemInfo.name == name) then
-            index = i
-            break
-        end
-    end
-    -- 获取机器人物品栏中的种子信息并封装
-    if name == itemCropSeedName and itemInfo.name == itemCropSeedName then
-        local itemSpring = hybridBlockCrop:new()
-        itemSpring.ga = itemInfo.crop.gain
-        itemSpring.gr = itemInfo.crop.growth
-        itemSpring.re = itemInfo.crop.rsistance
-        itemSpring.name = itemInfo.crop.name
-        itemInfo = itemSpring
-    end
-    if index ~= -1 and hasSelect then
-        robot.select(index)
-    end
-    return index, itemInfo
-end
-
---放置杂交架
-local function plantBlockCrop()
-    -- 面前有物品挡住，尝试挖掉
-    if hybridBlockCrop:getName(ge.analyze(sides.front)) ~= itemAirName then
-        robot.swing()
-    end
-
+local function waitMiddleGrow()
     while true do
-        local itemIndex = findBotInventory(blockCropName, true)
-        if itemIndex ~= -1 then
-            break
-        else
-            print("机器人物品栏中没有作物架,请添加")
-            for i = 5, 1, -1 do
-                print(i .. "秒后重新检测")
-            end
-        end
-    end
-    robot.place()
-    ic.equip()
-    robot.use(sides.front)
-    ic.equip()
-end
-
-local function waitMiddleGrow(middleHybrid)
-    while true do
-        if middleHybrid.stage >= 3 then
+        local middleInfo = ge.analyze(sides.front)
+        local middleHybrid = hybridBlockCrop:newByTarget(middleInfo)
+        if middleHybrid.stage == middleInfo["crop:maxSize"] then
             print("作物成熟")
             break;
         else
@@ -88,46 +37,26 @@ local function meetsHybridAttr(leftHybrid, rightHybrid, middleHybrid)
     if middleHybrid.gr > 23 then
         return false
     end
-    return middleHybrid:compareHybrid(leftHybrid) or middleHybrid:compareHybrid(rightHybrid)
+    return middleHybrid:compareHybrid(leftHybrid, cropSeedWeight) or
+        middleHybrid:compareHybrid(rightHybrid, cropSeedWeight)
 end
 
----获取左右父母本植物的属性信息
----@return table @comment 左边植物属性
----@return table @comment 右边植物属性
-local function checkParentBlockCropInfo()
-    botMove.leftWard()
-
-    local leftBlockCropGe = ge.analyze(sides.front)
-    local leftHybrid = hybridBlockCrop:newByTarget(leftBlockCropGe)
-    print("左侧植物名:" .. leftHybrid.name .. " 属性为:")
-    print("ga:" .. leftHybrid.ga)
-    print("gr:" .. leftHybrid.gr)
-    print("re:" .. leftHybrid.re)
-
-    botMove.rightWard(2)
-
-    local rightBlockCropGe = ge.analyze(sides.front)
-    local rightHybrid = hybridBlockCrop:newByTarget(rightBlockCropGe)
-    print("右侧植物名:" .. rightHybrid.name .. " 属性为:")
-    print("ga:" .. rightHybrid.ga)
-    print("gr:" .. rightHybrid.gr)
-    print("re:" .. rightHybrid.re)
-
-    botMove.leftWard()
-    print("开始育种")
-
-    return leftHybrid, rightHybrid
-end
 local function changeParent(leftHybrid, rightHybrid, middleHybrid)
-    if not leftHybrid:compareHybrid(rightHybrid) then
+    local tag = -1
+    if not leftHybrid:compareHybrid(rightHybrid, cropSeedWeight) then
         botMove.leftWard()
-        robot.swing()
         local index = 1
+        -- 遍历机器人物品栏得杂交
         while index <= robot.inventorySize() do
-            local itemIndex, itemInfo = findBotInventory(itemCropSeedName, false, index)
+            local itemIndex, itemInfo = comment.findBotInventory(itemCropSeedName, false, index)
+            if itemIndex == -1 then
+                index = itemIndex
+                break;
+            end
             -- 检测当前选中的种子是否为子代掉落的种子袋
-            if middleHybrid:equals(itemInfo) then
-                findBotInventory(blockCropName, true)
+            if itemInfo ~= nil and middleHybrid:equals(itemInfo) then
+                robot.swing()
+                comment.findBotInventory(blockCropName, true)
                 robot.place()
                 robot.select(itemIndex)
                 ic.equip()
@@ -136,25 +65,25 @@ local function changeParent(leftHybrid, rightHybrid, middleHybrid)
 
                 -- 回到中间
                 botMove.rightWard()
-                break;
+                return 1
             end
             if itemIndex ~= -1 then
                 index = itemIndex
             end
             index = index + 1
         end
-        if index > robot.inventorySize() then
-            print("未拾取到育种成功的种子,程序错误")
-            os.exit(0)
+        if index == -1 or index > robot.inventorySize() then
+            print("未拾取到育种成功的种子,育种失败")
+            botMove.rightWard()
         end
     else
         botMove.rightWard()
-        robot.swing()
         local index = 1
         while index <= robot.inventorySize() do
-            local itemIndex, itemInfo = findBotInventory(itemCropSeedName, false, index)
-            if middleHybrid:equals(itemInfo) then
-                findBotInventory(blockCropName, true)
+            local itemIndex, itemInfo = comment.findBotInventory(itemCropSeedName, false, index)
+            if itemInfo ~= nil and middleHybrid:equals(itemInfo) then
+                robot.swing()
+                comment.findBotInventory(blockCropName, true)
                 robot.place()
                 robot.select(itemIndex)
                 ic.equip()
@@ -163,16 +92,16 @@ local function changeParent(leftHybrid, rightHybrid, middleHybrid)
 
                 -- 回到中间
                 botMove.leftWard()
-                break;
+                return 2
             end
             if itemIndex ~= -1 then
                 index = itemIndex
             end
             index = index + 1
         end
-        if index > robot.inventorySize() then
-            print("未拾取到育种成功的种子,程序错误")
-            os.exit(0)
+        if index == -1 or index > robot.inventorySize() then
+            print("未拾取到育种成功的种子,育种失败")
+            botMove.leftWard()
         end
     end
 end
@@ -180,7 +109,7 @@ end
 -- 育种
 function breeding.breeding()
     -- 检测左右父母本植物是否成熟以及获取属性
-    local leftHybrid, rightHybrid = checkParentBlockCropInfo()
+    local leftHybrid, rightHybrid = comment.checkParentBlockCropInfo()
     if leftHybrid.name == nil or leftHybrid.name == itemAirName then
         print("左侧植物为空,无法开始育种")
         return
@@ -202,14 +131,21 @@ function breeding.breeding()
             local flag = meetsHybridAttr(leftHybrid, rightHybrid, middleHybrid)
             if not flag then
                 print("未达到期望的杂交属性")
-                plantBlockCrop()
+                comment.plantBlockCrop()
                 goto continue
             end
-            waitMiddleGrow(middleHybrid)
+            waitMiddleGrow()
             robot.swing()
-            changeParent(leftHybrid, rightHybrid, middleHybrid)
+            -- 等待3秒待机器人捡起种子
+            os.sleep(3)
+            local tag = changeParent(leftHybrid, rightHybrid, middleHybrid)
+            if tag == 1 then
+                leftHybrid = middleHybrid
+            elseif tag == 2 then
+                rightHybrid = middleHybrid
+            end
         else
-            plantBlockCrop()
+            comment.plantBlockCrop()
         end
         ::continue::
     end
