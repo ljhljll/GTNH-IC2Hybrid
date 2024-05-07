@@ -64,13 +64,32 @@ function HybridBlockCrop:getGrowthStage(geInfo)
     return cropSize
 end
 
-function HybridBlockCrop:compareHybrid(otherHybrid)
-    local maxA = self.ga + self.gr * 2 + self.re
-    local maxB = otherHybrid.ga + otherHybrid.gr * 2 + otherHybrid.re
-
-    return maxA > maxB
+---与otherHybrid的加权平均值进行比较
+---@param otherHybrid HybridBlockCrop
+---@param weight table @comment 权重数组 顺序为[ga, gr, re]
+---@return boolean @comment 是否大于otherHybrid
+function HybridBlockCrop:compareHybrid(otherHybrid, weight)
+    return self:cropSeedWeightAvg(weight) > otherHybrid:cropSeedWeightAvg(weight)
 end
 
+---计算当前植物的加权平均值
+---@param weight table @comment 权重数组
+---@return number @comment 种子的加权平均值
+function HybridBlockCrop:cropSeedWeightAvg(weight)
+    local selfData = { self.ga, self.gr, self.re }
+    local weightedSum = 0
+    local totalWeight = 0
+    for i = 1, #selfData, 1 do
+        weightedSum = weightedSum + selfData[i] * weight[i]
+        totalWeight = totalWeight + weight[i]
+    end
+
+    return weightedSum / totalWeight
+end
+
+---比较是否为同一种子
+---@param otherHybrid HybridBlockCrop
+---@return boolean
 function HybridBlockCrop:equals(otherHybrid)
     return self.name == otherHybrid.name and self.ga == otherHybrid.gr and self.re == otherHybrid.re
 end
